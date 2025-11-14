@@ -3,30 +3,40 @@ from playwright.async_api import async_playwright
 import json
 import os
 from amazon import get_product as get_amazon_product
+from john_lewis import get_product as get_john_lewis_product
+from costco import get_product as get_costco_product
+from argos import get_product as get_argos_product
 from requests import post
 
 AMAZON = "https://amazon.ca"
+JOHN_LEWIS = "https://www.johnlewis.com"
+COSTCO = "https://www.costco.ca"
+ARGOS = "https://www.argos.co.uk"
 
 URLS = {
     AMAZON: {
         "search_field_query": 'input[name="field-keywords"]',
         "search_button_query": 'input[value="Go"]',
         "product_selector": "div.s-card-container"
+    },
+    JOHN_LEWIS: {
+        "search_field_query": 'input[name="search-term"]',
+        "search_button_query": 'button[type="submit"]',
+        "product_selector": "div.product-card"
+    },
+    COSTCO: {
+        "search_field_query": 'input[name="search-term"]',
+        "search_button_query": 'button[type="submit"]',
+        "product_selector": "div.product-card"
+    },
+    ARGOS: {
+        "search_field_query": 'input[name="search-term"]',
+        "search_button_query": 'button[type="submit"]',
+        "product_selector": "div.product-card"
     }
 }
 
 available_urls = URLS.keys()
-
-
-def load_auth():
-    FILE = os.path.join("Scraper", "auth.json")
-    with open(FILE, "r") as f:
-        return json.load(f)
-
-# place your bright data credentials in auth.json file with keys: "username", "password" and "host"
-cred = load_auth()
-auth = f'{cred["username"]}:{cred["password"]}'
-browser_url = f'wss://{auth}@{cred["host"]}'
 
 
 async def search(metadata, page, search_text):
@@ -99,7 +109,7 @@ async def main(url, search_text, response_route):
 
     async with async_playwright() as pw:
         print('Connecting to browser.')
-        browser = await pw.chromium.connect_over_cdp(browser_url)
+        browser = await pw.chromium.launch()
         page = await browser.new_page()
         print("Connected.")
         await page.goto(url, timeout=120000)
@@ -109,6 +119,12 @@ async def main(url, search_text, response_route):
         def func(x): return None
         if url == AMAZON:
             func = get_amazon_product
+        elif url == JOHN_LEWIS:
+            func = get_john_lewis_product
+        elif url == COSTCO:
+            func = get_costco_product
+        elif url == ARGOS:
+            func = get_argos_product
         else:
             raise Exception('Invalid URL')
 

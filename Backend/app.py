@@ -3,12 +3,14 @@ from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from flask_cors import CORS
+from pushbullet import PushBullet
 
 app = Flask(__name__)
 CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///database.db'
 
 db = SQLAlchemy(app)
+pb = PushBullet("o.3g6f3f6f3f6f3f6f3f6f3f6f3f6f3f6f")
 
 
 class ProductResult(db.Model):
@@ -30,16 +32,30 @@ class ProductResult(db.Model):
         self.source = source
 
 
-class TrackedProducts(db.Model):
+class PushToken(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    token = db.Column(db.String(1000))
+
+    def __init__(self, token):
+        self.token = token
+
+class TrackedProducts(db.Model):
+    id = db.Column(db.Integer, primary_key=T=True)
     name = db.Column(db.String(1000))
+    url = db.Column(db.String(1000))
+    target_price = db.Column(db.Float)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     tracked = db.Column(db.Boolean, default=True)
 
-    def __init__(self, name, tracked=True):
+    def __init__(self, name, url, target_price, tracked=True):
         self.name = name
+        self.url = url
+        self.target_price = target_price
         self.tracked = tracked
 
+
+def send_notification(title, body):
+    push = pb.push_note(title, body)
 
 @app.route('/results', methods=['POST'])
 def submit_results():
@@ -57,6 +73,10 @@ def submit_results():
             source=source
         )
         db.session.add(product_result)
+
+        tracked_product = TrackedProducts.query.filter_by(url=result['url']).first()
+        if tracked_product and result['price'] < tracked_product.target_price:
+            send_notification(f"Price drop for {result['name']}", f"The price has dropped to {result['price']}.")
 
     db.session.commit()
     response = {'message': 'Received data successfully'}
@@ -131,10 +151,30 @@ def start_scraper():
     return jsonify(response), 200
 
 
+@app.route('/register-push-token', methods=['POST'])
+def register_push_token():
+    token = request.json.get('token')
+    push_token = PushToken(token=token)
+    db.session.add(push_token)
+    db.session.commit()
+    response = {'message': 'Token registered successfully'}
+    return jsonify(response), 200
+
+
+@app.route('/scrape-url', methods=['POST'])
+def scrape_url():
+    url = request.json.get('url')
+    # THIS IS A PLACEHOLDER
+    response = {'message': 'Scraping URL'}
+    return jsonify(response), 200
+
+
 @app.route('/add-tracked-product', methods=['POST'])
 def add_tracked_product():
     name = request.json.get('name')
-    tracked_product = TrackedProducts(name=name)
+    url = request.json.get('url')
+    target_price = request.json.get('target_price')
+    tracked_product = TrackedProducts(name=name, url=url, target_price=target_price)
     db.session.add(tracked_product)
     db.session.commit()
 
@@ -166,6 +206,8 @@ def get_tracked_products():
         results.append({
             'id': product.id,
             'name': product.name,
+            'url': product.url,
+            'target_price': product.target_price,
             'created_at': product.created_at,
             'tracked': product.tracked
         })
